@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>NIL Explorer — LISA × HMM</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="style.css?v=11" />
+</head>
+
+<body>
+  <header>
+    <h1>NIL Explorer — LISA × HMM</h1>
+
+    <div class="controls">
+      <label for="colorSelect">Color by:</label>
+      <select id="colorSelect">
+        <option value="hmm_state">HMM regime</option>
+        <option value="lisa_class">LISA cluster</option>
+      </select>
+
+      <button id="zoomFilteredBtn" class="btn">Zoom to filtered NILs</button>
+      <button id="resetBtn" class="btn">Reset</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="mapCol">
+      <div class="mapLegendBar">
+        <div class="legendBlock">
+          <div class="legendTitle">HMM regimes</div>
+          <div id="legendHMM" class="legendRow"></div>
+        </div>
+
+        <div class="legendBlock">
+          <div class="legendTitle">LISA clusters</div>
+          <div id="legendLISA" class="legendRow"></div>
+        </div>
+      </div>
+
+      <div id="map" aria-label="NIL map"></div>
+
+      <!-- Mobile-only floating button to reopen the panel when hidden -->
+      <button id="openPanelFab" class="fab hidden" type="button">Open panel</button>
+    </section>
+
+    <!-- Sidebar / bottom sheet -->
+    <aside id="sidebar" class="sheet sheet--peek" aria-label="Controls">
+      <div id="sheetHandle" class="sheetHandle" aria-label="Toggle panel">
+        <div class="grab"></div>
+        <div class="sheetTitle">Panel</div>
+        <div id="sheetChevron" class="chev">▲</div>
+      </div>
+
+      <div class="sheetInner">
+        <!-- Intro -->
+        <section id="introCard" class="card">
+          <div class="cardTop">
+            <h2 class="cardTitle">How to use this in 10 seconds</h2>
+            <button id="dismissIntroBtn" class="btnSmall">Got it</button>
+          </div>
+
+          <p class="p">
+            Interactive map of Milan NILs linking <b>local spatial autocorrelation</b> (LISA) and <b>market regimes</b> (HMM).
+          </p>
+
+          <ol class="steps">
+            <li><button id="step1Btn" class="linkBtn">Choose color mode</button></li>
+            <li><button id="step2Btn" class="linkBtn">Tap a matrix cell to filter</button></li>
+            <li><button id="step3Btn" class="linkBtn">Select a NIL to see a 2-year scenario</button></li>
+          </ol>
+
+          <div class="small">
+            Tip: copy the URL to share the current view (filters + selection are encoded).
+          </div>
+        </section>
+
+        <!-- Search -->
+        <section class="card">
+          <h2 class="cardTitle">Search for a NIL</h2>
+
+          <div class="searchWrap">
+            <input id="searchInput"
+                   class="input"
+                   type="search"
+                   placeholder="Type a NIL name or id..."
+                   autocomplete="off" />
+            <div id="searchSuggest" class="suggest hidden" aria-label="Search suggestions"></div>
+          </div>
+
+          <div class="small" id="activeStateLine"></div>
+        </section>
+
+        <!-- NIL details -->
+        <section id="nilDetailsCard" class="card hidden">
+          <div class="cardTop">
+            <h2 class="cardTitle">Interpretation of selected NIL</h2>
+            <button id="clearSelectionBtn" class="btnSmall">Clear selection</button>
+          </div>
+
+          <div id="nilTitle" class="big"></div>
+          <div id="nilMeta" class="meta"></div>
+
+          <div class="interpBox">
+            <div class="interpTitle">What this combination suggests</div>
+            <div id="nilInterpretation" class="interpText"></div>
+          </div>
+
+          <div class="subhead">Conditional descriptions of regime evolution 2 years from now</div>
+          <div id="regimeWrap" class="regime"></div>
+        </section>
+
+        <!-- Matrix -->
+        <section class="card" id="matrixCard">
+          <div class="cardTop">
+            <h2 class="cardTitle">LISA × HMM matrix</h2>
+            <button id="howToBtn" class="btnSmall">How to read</button>
+          </div>
+
+          <div id="howToPanel" class="howTo hidden">
+            <ul class="bullets">
+              <li><b>LISA</b> describes local spatial context (HH/LL/LH/NS).</li>
+              <li><b>HMM</b> describes the current regime (Under / Aligned / Hyped).</li>
+              <li>Each cell is a <b>subset of NILs</b> matching both labels.</li>
+              <li>Tap a NIL to view <b>conditional descriptions of regime evolution 2 years from now</b>.</li>
+            </ul>
+          </div>
+
+          <div id="matrixWrap"></div>
+
+          <div class="interpBox">
+            <div class="interpTitle">Interpretation</div>
+            <div id="filterInterpretation" class="interpText">
+              Tap a matrix cell to get an interpretation.
+            </div>
+          </div>
+        </section>
+
+        <!-- List -->
+        <section class="card">
+          <div class="cardTop">
+            <h2 class="cardTitle">NIL list</h2>
+            <button id="toggleListBtn" class="btnSmall">Collapse</button>
+          </div>
+
+          <div id="listSummary" class="small"></div>
+          <div id="nilList" class="list"></div>
+        </section>
+      </div>
+    </aside>
+  </main>
+
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script defer src="app.js?v=11"></script>
+</body>
+</html>
