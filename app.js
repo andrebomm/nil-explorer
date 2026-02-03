@@ -74,21 +74,21 @@ const openPanelFab = document.getElementById("openPanelFab");
 
 // ===== Interpretations =====
 const CELL_INTERP = {
-  "HH|Underestimated": "High-value spatial context with a discounted regime. Investigate factors temporarily depressing the regime relative to local context.",
-  "HH|Aligned":        "High-value spatial context with an aligned regime. Pricing is broadly consistent with strong local context (stable core pattern).",
-  "HH|Hyped":          "High-value spatial context with a hyped regime. Elevated regime on top of a strong context; may reflect overheating or sentiment-driven premia.",
+  "HH|Underestimated": "High-value spatial context with a discounted market state. Investigate factors temporarily depressing the state relative to local context.",
+  "HH|Aligned":        "High-value spatial context with an aligned market state. Pricing is broadly consistent with strong local context (stable core pattern).",
+  "HH|Hyped":          "High-value spatial context with a hyped market state. Elevated state on top of a strong context; may reflect overheating or sentiment-driven premia.",
 
-  "LL|Underestimated": "Low-value spatial context with a discounted regime. Concentrated low-price area with additional discounting; compounding negatives may be present.",
-  "LL|Aligned":        "Low-value spatial context with an aligned regime. Pricing appears coherent with the local context.",
-  "LL|Hyped":          "Low-value spatial context with a hyped regime. Potential re-rating dynamics or local change—validate carefully.",
+  "LL|Underestimated": "Low-value spatial context with a discounted market state. Concentrated low-price area with additional discounting; compounding negatives may be present.",
+  "LL|Aligned":        "Low-value spatial context with an aligned market state. Pricing appears coherent with the local context.",
+  "LL|Hyped":          "Low-value spatial context with a hyped market state. Potential re-rating dynamics or local change—validate carefully.",
 
   "LH|Underestimated": "Near high-value areas but currently discounted. Often interpreted as potential re-rating candidates if perception/fundamentals catch up with nearby context.",
-  "LH|Aligned":        "Near high-value areas with an aligned regime. Pricing is broadly consistent with favorable nearby context.",
-  "LH|Hyped":          "Near high-value areas with a hyped regime. Could reflect spillover enthusiasm from adjacent high-value clusters.",
+  "LH|Aligned":        "Near high-value areas with an aligned market state. Pricing is broadly consistent with favorable nearby context.",
+  "LH|Hyped":          "Near high-value areas with a hyped market state. Could reflect spillover enthusiasm from adjacent high-value clusters.",
 
-  "NotSignificant|Underestimated": "No strong local autocorrelation but discounted regime. More idiosyncratic patterns; investigate micro-drivers and heterogeneity.",
-  "NotSignificant|Aligned":        "No strong local autocorrelation and aligned regime. Pricing behaves more independently, without strong local clustering effects.",
-  "NotSignificant|Hyped":          "No strong local autocorrelation but hyped regime. Regime elevation without spatial reinforcement—possible isolated drivers."
+  "NotSignificant|Underestimated": "No strong local autocorrelation but discounted market state. More idiosyncratic patterns; investigate micro-drivers and heterogeneity.",
+  "NotSignificant|Aligned":        "No strong local autocorrelation and aligned market state. Pricing behaves more independently, without strong local clustering effects.",
+  "NotSignificant|Hyped":          "No strong local autocorrelation but hyped market state. State elevation without spatial reinforcement—possible isolated drivers."
 };
 
 const DEFAULT_INTERP = "Tap a matrix cell to get an interpretation.";
@@ -137,7 +137,8 @@ function setSheetState(state) {
 function syncSheetChevron() {
   if (!isMobile()) return;
   const st = getSheetState();
-  sheetChevron.textContent = (st === "expanded") ? "▼" : "▲";
+  // rotate chevron when expanded (down)
+  sheetChevron.classList.toggle("isDown", st === "expanded");
 }
 function syncFab() {
   if (!isMobile()) {
@@ -152,6 +153,109 @@ function toggleSheet() {
   if (st === "hidden") setSheetState("peek");
   else if (st === "peek") setSheetState("expanded");
   else setSheetState("peek");
+}
+
+// ===== DRAG HANDLE (mobile) =====
+function enableSheetDrag() {
+  if (!isMobile()) return;
+  if (!sheetHandle) return;
+
+  let dragging = false;
+  let startY = 0;
+  let startHeight = 0;
+
+  const peekH = () => Math.round(window.innerHeight * 0.24);
+  const expH  = () => Math.round(window.innerHeight * 0.92);
+
+  function currentHeight() {
+    const rect = sidebar.getBoundingClientRect();
+    return rect.height;
+  }
+
+  function snapToHeight(h) {
+    const vh = window.innerHeight;
+    const minHide = Math.round(vh * 0.16);   // below this -> hidden
+    const midPeek = Math.round(vh * 0.55);   // below this -> peek, else expanded
+
+    if (h < minHide) setSheetState("hidden");
+    else if (h < midPeek) setSheetState("peek");
+    else setSheetState("expanded");
+  }
+
+  function onDown(e) {
+    if (!isMobile()) return;
+    dragging = true;
+    startY = e.clientY;
+    startHeight = currentHeight();
+
+    sidebar.style.transition = "none";
+    sheetHandle.style.cursor = "grabbing";
+
+    // capture pointer
+    sheetHandle.setPointerCapture(e.pointerId);
+  }
+
+  function onMove(e) {
+    if (!dragging) return;
+    const dy = startY - e.clientY; // up = positive
+    let newH = startHeight + dy;
+
+    // clamp
+    const minH = 0;
+    const maxH = expH();
+    newH = Math.max(minH, Math.min(maxH, newH));
+
+    // when very low, visually keep it almost gone
+    if (newH < 10) newH = 0;
+
+    // apply live height
+    sidebar.style.height = `${newH}px`;
+    sidebar.style.transform = "translateY(0)";
+
+    // show fab only if fully down
+    if (newH === 0) {
+      openPanelFab.classList.remove("hidden");
+    } else {
+      openPanelFab.classList.add("hidden");
+    }
+  }
+
+  function onUp(e) {
+    if (!dragging) return;
+    dragging = false;
+
+    sheetHandle.releasePointerCapture(e.pointerId);
+
+    // restore transitions
+    sidebar.style.transition = "";
+    sheetHandle.style.cursor = "";
+
+    const h = parseFloat(sidebar.style.height || `${currentHeight()}`);
+    sidebar.style.height = ""; // reset inline height so CSS states work
+
+    // snap based on drag result
+    if (h <= 0) {
+      setSheetState("hidden");
+      setTimeout(() => map.invalidateSize(), 80);
+      return;
+    }
+
+    snapToHeight(h);
+    setTimeout(() => map.invalidateSize(), 120);
+  }
+
+  sheetHandle.addEventListener("pointerdown", onDown);
+  sheetHandle.addEventListener("pointermove", onMove);
+  sheetHandle.addEventListener("pointerup", onUp);
+  sheetHandle.addEventListener("pointercancel", onUp);
+
+  // keep snap heights consistent on resize/orientation
+  window.addEventListener("resize", () => {
+    if (!isMobile()) return;
+    const st = getSheetState();
+    // re-apply state to get correct vh-based height
+    setSheetState(st);
+  });
 }
 
 // ===== Autocomplete helpers =====
@@ -183,7 +287,6 @@ function renderSuggestions() {
 
   const qLower = q.toLowerCase();
 
-  // Candidate set: respects LISA/HMM filters, then matches query on id/name
   let candidates = allFeatures
     .filter(matchesNonSearchFilters)
     .map(f => {
@@ -197,7 +300,6 @@ function renderSuggestions() {
     })
     .filter(x => x.idx !== -1);
 
-  // Sort: starts-with first, then earlier match, then alphabetical
   candidates.sort((a, b) => {
     if (a.starts !== b.starts) return a.starts ? -1 : 1;
     if (a.idx !== b.idx) return a.idx - b.idx;
@@ -216,8 +318,8 @@ function renderSuggestions() {
 
   for (const item of candidates) {
     const p = item.f.properties || {};
-    const lisa = shortLisa(p.lisa_class ?? "-");
-    const hmm  = shortHmm(p.hmm_state ?? "-");
+    const lisa = lisaFullName(p.lisa_class ?? "-");
+    const hmm  = hmmFullName(p.hmm_state ?? "-");
 
     const row = document.createElement("div");
     row.className = "suggestItem";
@@ -233,27 +335,23 @@ function renderSuggestions() {
     row.appendChild(title);
     row.appendChild(sub);
 
-    // pointerdown prevents the input blur from killing the click on mobile
     row.addEventListener("pointerdown", (e) => {
       e.preventDefault();
 
-      // Select NIL (opens sheet & scrolls to NIL card inside onSelectNil)
       onSelectNil(item.f, { zoom: true });
 
-      // Clear search after selection (better UX: don't keep map dimmed/filtered)
+      // Clear search after selection (better UX)
       searchInput.value = "";
       searchTerm = "";
 
       hideSuggestions();
 
-      // Update UI
       geoLayer.setStyle(featureStyle);
       renderList();
       updateActiveStateLine();
       updateZoomButtonState();
       writeUrlState();
 
-      // Close keyboard
       searchInput.blur();
     });
 
@@ -267,7 +365,6 @@ window.addEventListener("DOMContentLoaded", init);
 async function init() {
   readUrlState();
 
-  // intro persistence
   const introDismissed = localStorage.getItem("nil_intro_dismissed") === "1";
   if (introDismissed) introCard.classList.add("hidden");
 
@@ -315,12 +412,13 @@ async function init() {
   updateInterpretationBox();
 
   // sheet initial state
-  if (isMobile()) {
-    setSheetState("peek");
-  } else {
-    sidebar.classList.remove("sheet--hidden", "sheet--peek", "sheet--expanded");
-  }
+  if (isMobile()) setSheetState("peek");
+  else sidebar.classList.remove("sheet--hidden", "sheet--peek", "sheet--expanded");
   syncFab();
+  syncSheetChevron();
+
+  // enable drag on handle
+  enableSheetDrag();
 
   // events
   colorSelect.addEventListener("change", () => {
@@ -329,16 +427,14 @@ async function init() {
     writeUrlState();
   });
 
-  // SEARCH: focus/blur/input + suggestions
+  // SEARCH
   searchInput.addEventListener("focus", () => {
     if (isMobile()) setSheetState("expanded");
     renderSuggestions();
   });
 
   searchInput.addEventListener("blur", () => {
-    // allow pointerdown on suggestion first
     setTimeout(() => hideSuggestions(), 120);
-
     setTimeout(() => map.invalidateSize(), 80);
     if (isMobile() && !selectedNilId) setSheetState("peek");
   });
@@ -389,6 +485,7 @@ async function init() {
 
   clearSelectionBtn.addEventListener("click", () => clearSelection({ restoreMap: true, hideSheet: true }));
 
+  // tap still toggles (keep it)
   sheetHandle.addEventListener("click", () => {
     if (isMobile()) toggleSheet();
   });
@@ -445,11 +542,11 @@ function renderMatrix() {
   const grandTotal = allFeatures.length;
 
   let html = `<table class="matrix"><thead><tr><th>LISA \\ HMM</th>`;
-  for (const h of HMM_STATES) html += `<th>${shortHmm(h)}</th>`;
+  for (const h of HMM_STATES) html += `<th>${h}</th>`;
   html += `</tr></thead><tbody>`;
 
   for (const l of LISA_LEVELS) {
-    html += `<tr><th>${shortLisa(l)}</th>`;
+    html += `<tr><th>${lisaShort(l)}</th>`;
     for (const h of HMM_STATES) {
       const c = counts[l][h];
       const isActive = (activeLisa === l && activeHmm === h);
@@ -477,7 +574,6 @@ function renderMatrix() {
         activeLisa = l; activeHmm = h;
       }
 
-      // if current NIL is filtered out, clear selection
       if (selectedNilId) {
         const selectedFeat = allFeatures.find(f => String(f.properties?.nil_id ?? "") === String(selectedNilId));
         if (selectedFeat && !matchesFilters(selectedFeat)) clearSelection({ restoreMap: false, hideSheet: false });
@@ -537,8 +633,8 @@ function renderList() {
     const p = f.properties || {};
     const id = String(p.nil_id ?? "");
     const name = String(p.nil_name ?? "");
-    const lisa = shortLisa(p.lisa_class ?? "-");
-    const hmm  = shortHmm(p.hmm_state ?? "-");
+    const lisa = lisaShort(p.lisa_class ?? "-");
+    const hmm  = hmmFullName(p.hmm_state ?? "-");
     const active = (selectedNilId && id === selectedNilId) ? "active" : "";
     return `
       <div class="listItem ${active}" data-id="${id}">
@@ -563,7 +659,6 @@ function onSelectNil(feature, opts = { zoom: true }) {
   const id = String(p.nil_id ?? "");
   if (!id) return;
 
-  // save current map view only when selecting from "nothing selected"
   if (!selectedNilId && map) {
     mapViewBeforeSelect = { center: map.getCenter(), zoom: map.getZoom() };
   }
@@ -576,7 +671,6 @@ function onSelectNil(feature, opts = { zoom: true }) {
   updateZoomButtonState();
   writeUrlState();
 
-  // mobile: open sheet AND bring NIL interpretation to the top
   if (isMobile()) {
     setSheetState("expanded");
     setTimeout(() => {
@@ -621,14 +715,9 @@ function clearSelection({ restoreMap, hideSheet }) {
     setTimeout(() => map.invalidateSize(), 80);
   }
 
-  // Go back to top so user can easily access color mode / legends / reset
   window.scrollTo({ top: 0, behavior: "smooth" });
-
-  // Extra-robust: ensure the map area is visible
   const mapCol = document.querySelector(".mapCol");
   if (mapCol) mapCol.scrollIntoView({ behavior: "smooth", block: "start" });
-
-  // Make sure Leaflet re-renders after the sheet animation
   setTimeout(() => map.invalidateSize(), 180);
 }
 
@@ -647,20 +736,21 @@ function renderSelectedNil(feature) {
   const p = feature.properties || {};
   const id = String(p.nil_id ?? "");
   const name = String(p.nil_name ?? "NIL");
-  const lisa = shortLisa(p.lisa_class ?? "-");
-  const hmm  = shortHmm(p.hmm_state ?? "-");
+
+  const lisaFull = lisaFullName(p.lisa_class ?? "-");
+  const hmmFull  = hmmFullName(p.hmm_state ?? "-");
 
   nilTitle.textContent = `${name} (${id})`;
-  nilMeta.innerHTML = `<b>LISA:</b> ${lisa}<br><b>HMM:</b> ${hmm}`;
+  nilMeta.innerHTML = `<b>LISA cluster:</b> ${lisaFull}<br><b>HMM state:</b> ${hmmFull}`;
 
   const key = `${p.lisa_class}|${p.hmm_state}`;
   nilInterpretation.textContent = CELL_INTERP[key] || "No interpretation available for this combination.";
 
-  renderRegimeEvolution(p.hmm_state);
+  renderStateEvolution(p.hmm_state);
 }
 
-// ===== 2-year regime evolution =====
-function renderRegimeEvolution(currentHmmState) {
+// ===== 2-year state evolution =====
+function renderStateEvolution(currentHmmState) {
   const state = currentHmmState;
   if (!state || !TRANSITION[state]) {
     regimeWrap.innerHTML = `<div class="small">Unavailable (missing HMM state).</div>`;
@@ -673,7 +763,7 @@ function renderRegimeEvolution(currentHmmState) {
     const pct = Math.round(p * 100);
     return `
       <div class="barRow">
-        <div class="barLabel">${shortHmm(s)}</div>
+        <div class="barLabel">${s}</div>
         <div class="barTrack"><div class="barFill" style="width:${pct}%"></div></div>
         <div class="barPct">${pct}%</div>
       </div>
@@ -716,8 +806,8 @@ function zoomToFiltered() {
 // ===== Active state line =====
 function updateActiveStateLine() {
   const parts = [];
-  if (activeLisa) parts.push(`LISA=${shortLisa(activeLisa)}`);
-  if (activeHmm) parts.push(`HMM=${shortHmm(activeHmm)}`);
+  if (activeLisa) parts.push(`LISA=${lisaShort(activeLisa)}`);
+  if (activeHmm) parts.push(`HMM=${activeHmm}`);
   if (searchTerm) parts.push(`search="${searchTerm}"`);
   activeStateLine.textContent = parts.length ? `Active filters: ${parts.join(" · ")}` : "";
 }
@@ -756,7 +846,7 @@ function renderLegends() {
     ["HH",             colorForLISA("HH"),             "High-High"],
     ["LL",             colorForLISA("LL"),             "Low-Low"],
     ["LH",             colorForLISA("LH"),             "Low-High"],
-    ["NotSignificant", colorForLISA("NotSignificant"), "Not Significant"]
+    ["NotSignificant", colorForLISA("NotSignificant"), "Not significant"]
   ].map(([_, color, label]) => legendItem(label, color)).join("");
 }
 function legendItem(label, color) {
@@ -776,8 +866,21 @@ async function fetchJSON(path) {
   if (!res.ok) throw new Error(`Fetch error ${path}: ${res.status}`);
   return await res.json();
 }
-function shortLisa(l) { return l === "NotSignificant" ? "NS" : l; }
-function shortHmm(h)  { return h === "Underestimated" ? "Under" : h; }
+
+function lisaShort(l) { return l === "NotSignificant" ? "NS" : l; }
+
+function lisaFullName(l) {
+  if (l === "HH") return "High-High";
+  if (l === "LL") return "Low-Low";
+  if (l === "LH") return "Low-High";
+  if (l === "NotSignificant") return "Not significant";
+  return String(l);
+}
+
+function hmmFullName(h) {
+  if (HMM_STATES.includes(h)) return h;
+  return String(h);
+}
 
 /*
   WHERE TO CHANGE MAP COLORS:
