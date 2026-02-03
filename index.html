@@ -3,20 +3,20 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>NIL Explorer — LISA × HMM</title>
+  <title>Neighbor Identity Label Explorer — LISA × HMM</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="style.css?v=11" />
+  <link rel="stylesheet" href="style.css?v=12" />
 </head>
 
 <body>
   <header>
-    <h1>NIL Explorer — LISA × HMM</h1>
+    <h1>Neighbor Identity Label Explorer — LISA × HMM</h1>
 
     <div class="controls">
       <label for="colorSelect">Color by:</label>
       <select id="colorSelect">
-        <option value="hmm_state">HMM regime</option>
+        <option value="hmm_state">HMM state</option>
         <option value="lisa_class">LISA cluster</option>
       </select>
 
@@ -29,7 +29,7 @@
     <section class="mapCol">
       <div class="mapLegendBar">
         <div class="legendBlock">
-          <div class="legendTitle">HMM regimes</div>
+          <div class="legendTitle">HMM states</div>
           <div id="legendHMM" class="legendRow"></div>
         </div>
 
@@ -49,8 +49,11 @@
     <aside id="sidebar" class="sheet sheet--peek" aria-label="Controls">
       <div id="sheetHandle" class="sheetHandle" aria-label="Toggle panel">
         <div class="grab"></div>
-        <div class="sheetTitle">Panel</div>
-        <div id="sheetChevron" class="chev">▲</div>
+
+        <!-- nicer chevron (SVG), rotated by CSS classes -->
+        <svg id="sheetChevron" class="chevIcon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6.7 9.3a1 1 0 0 1 1.4 0L12 13.2l3.9-3.9a1 1 0 1 1 1.4 1.4l-4.6 4.6a1 1 0 0 1-1.4 0L6.7 10.7a1 1 0 0 1 0-1.4z"></path>
+        </svg>
       </div>
 
       <div class="sheetInner">
@@ -62,7 +65,7 @@
           </div>
 
           <p class="p">
-            Interactive map of Milan NILs linking <b>local spatial autocorrelation</b> (LISA) and <b>market regimes</b> (HMM).
+            Interactive map of Milan NILs linking <b>local spatial autocorrelation</b> (LISA) and <b>market states</b> (HMM).
           </p>
 
           <ol class="steps">
@@ -107,7 +110,7 @@
             <div id="nilInterpretation" class="interpText"></div>
           </div>
 
-          <div class="subhead">Conditional descriptions of regime evolution 2 years from now</div>
+          <div class="subhead">Conditional descriptions of state evolution 2 years from now</div>
           <div id="regimeWrap" class="regime"></div>
         </section>
 
@@ -120,10 +123,10 @@
 
           <div id="howToPanel" class="howTo hidden">
             <ul class="bullets">
-              <li><b>LISA</b> describes local spatial context (HH/LL/LH/NS).</li>
-              <li><b>HMM</b> describes the current regime (Under / Aligned / Hyped).</li>
+              <li><b>LISA</b> describes local spatial context (High-High / Low-Low / Low-High / Not significant).</li>
+              <li><b>HMM</b> describes the current market <b>state</b> (Underestimated / Aligned / Hyped).</li>
               <li>Each cell is a <b>subset of NILs</b> matching both labels.</li>
-              <li>Tap a NIL to view <b>conditional descriptions of regime evolution 2 years from now</b>.</li>
+              <li>Tap a NIL to view <b>conditional descriptions of state evolution 2 years from now</b>.</li>
             </ul>
           </div>
 
@@ -152,6 +155,6 @@
   </main>
 
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script defer src="app.js?v=11"></script>
+  <script defer src="app.js?v=12"></script>
 </body>
 </html>
