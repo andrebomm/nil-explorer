@@ -785,15 +785,15 @@ function shortHmm(h)  { return h === "Underestimated" ? "Under" : h; }
   - LISA colors: colorForLISA()
 */
 function colorForHMM(s) {
-  if (s === "Underestimated") return "#4c78a8";
-  if (s === "Aligned")        return "#72b7b2";
-  if (s === "Hyped")          return "#f58518";
+  if (s === "Underestimated") return "#264653";
+  if (s === "Aligned")        return "#2A9D8F";
+  if (s === "Hyped")          return "#F4A261";
   return "#cccccc";
 }
 function colorForLISA(cls) {
-  if (cls === "HH")             return "#d73027";
-  if (cls === "LL")             return "#4575b4";
-  if (cls === "LH")             return "#74add1";
-  if (cls === "NotSignificant") return "#d9d9d9";
+  if (cls === "HH")             return "#E63946";
+  if (cls === "LL")             return "#1D3557";
+  if (cls === "LH")             return "#A8DADC";
+  if (cls === "NotSignificant") return "#c3c3c3";
   return "#d9d9d9";
 }
