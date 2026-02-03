@@ -205,7 +205,7 @@ main {
   position: absolute;
   right: 14px;
   top: 50%;
-  transform: translateY(calc(-50% + 70px)); /* perfect vertical centering */
+  transform: translateY(calc(-50% + 40px)); /* perfect vertical centering */
   width: 22px;
   height: 22px;
 
