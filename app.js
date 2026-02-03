@@ -70,7 +70,6 @@ const activeStateLine = document.getElementById("activeStateLine");
 const sidebar = document.getElementById("sidebar");
 const sheetHandle = document.getElementById("sheetHandle");
 const sheetChevron = document.getElementById("sheetChevron");
-const openPanelFab = document.getElementById("openPanelFab");
 
 // ===== Interpretations =====
 const CELL_INTERP = {
@@ -115,147 +114,121 @@ function writeUrlState() {
   if (activeHmm) q.set("hmm", activeHmm);
   if (selectedNilId) q.set("nil", selectedNilId);
   if (searchTerm) q.set("s", searchTerm);
-
   history.replaceState(null, "", `${location.pathname}?${q.toString()}`);
 }
 
-// ===== Mobile sheet (3 states) =====
+// ===== Mobile helpers =====
 function isMobile() {
   return window.matchMedia && window.matchMedia("(max-width: 980px)").matches;
 }
-function getSheetState() {
-  if (sidebar.classList.contains("sheet--hidden")) return "hidden";
-  if (sidebar.classList.contains("sheet--expanded")) return "expanded";
-  return "peek";
+
+// Panel sizing constants (mobile)
+const HANDLE_H = 44;      // visual minimum (handle only)
+const SEARCH_H = 220;     // handle + search card
+const COMPACT_H = 360;    // intro + search, not too open
+function maxPanelH() { return Math.round(window.innerHeight * 0.92); }
+
+// Panel modes: collapsed (handle-only), searchOnly, compact, full
+function setPanelCollapsed(isCollapsed) {
+  sidebar.classList.toggle("isCollapsed", !!isCollapsed);
 }
-function setSheetState(state) {
-  sidebar.classList.remove("sheet--hidden", "sheet--peek", "sheet--expanded");
-  sidebar.classList.add(`sheet--${state}`);
-  syncSheetChevron();
-  syncFab();
+function setPanelMode(mode) {
+  sidebar.classList.remove("modeSearchOnly", "modeCompact");
+  if (mode === "searchOnly") sidebar.classList.add("modeSearchOnly");
+  if (mode === "compact") sidebar.classList.add("modeCompact");
 }
-function syncSheetChevron() {
+function setPanelHeight(px, { animate = true } = {}) {
   if (!isMobile()) return;
-  const st = getSheetState();
-  // rotate chevron when expanded (down)
-  sheetChevron.classList.toggle("isDown", st === "expanded");
+  const h = Math.max(HANDLE_H, Math.min(maxPanelH(), Math.round(px)));
+  if (!animate) sidebar.style.transition = "none";
+  else sidebar.style.transition = "";
+  sidebar.style.setProperty("--sheet-h", `${h}px`);
+  syncChevronForHeight(h);
+  setTimeout(() => map && map.invalidateSize(), 80);
 }
-function syncFab() {
-  if (!isMobile()) {
-    openPanelFab.classList.add("hidden");
-    return;
-  }
-  const st = getSheetState();
-  openPanelFab.classList.toggle("hidden", st !== "hidden");
+function getPanelHeight() {
+  const v = getComputedStyle(sidebar).getPropertyValue("--sheet-h").trim();
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : COMPACT_H;
 }
-function toggleSheet() {
-  const st = getSheetState();
-  if (st === "hidden") setSheetState("peek");
-  else if (st === "peek") setSheetState("expanded");
-  else setSheetState("peek");
+function syncChevronForHeight(h) {
+  if (!sheetChevron) return;
+  // Down arrow when "high" (feels like it's open), up arrow when low
+  sheetChevron.classList.toggle("isDown", h >= Math.min(maxPanelH(), 520));
 }
 
-// ===== DRAG HANDLE (mobile) =====
+// Tap behavior: only toggles collapsed <-> searchOnly (never full)
+function togglePanelTap() {
+  const h = getPanelHeight();
+  const isCollapsed = sidebar.classList.contains("isCollapsed") || h <= HANDLE_H + 2;
+
+  if (isCollapsed) {
+    setPanelCollapsed(false);
+    setPanelMode("searchOnly");
+    setPanelHeight(SEARCH_H, { animate: true });
+  } else {
+    // go to handle-only
+    setPanelCollapsed(true);
+    setPanelMode("searchOnly"); // mode irrelevant when collapsed, but safe
+    setPanelHeight(HANDLE_H, { animate: true });
+  }
+}
+
+// Drag handle: free drag, keeps final height (no snapping)
 function enableSheetDrag() {
-  if (!isMobile()) return;
-  if (!sheetHandle) return;
+  if (!isMobile() || !sheetHandle) return;
 
   let dragging = false;
   let startY = 0;
-  let startHeight = 0;
-
-  const peekH = () => Math.round(window.innerHeight * 0.24);
-  const expH  = () => Math.round(window.innerHeight * 0.92);
-
-  function currentHeight() {
-    const rect = sidebar.getBoundingClientRect();
-    return rect.height;
-  }
-
-  function snapToHeight(h) {
-    const vh = window.innerHeight;
-    const minHide = Math.round(vh * 0.16);   // below this -> hidden
-    const midPeek = Math.round(vh * 0.55);   // below this -> peek, else expanded
-
-    if (h < minHide) setSheetState("hidden");
-    else if (h < midPeek) setSheetState("peek");
-    else setSheetState("expanded");
-  }
+  let startH = 0;
 
   function onDown(e) {
     if (!isMobile()) return;
     dragging = true;
     startY = e.clientY;
-    startHeight = currentHeight();
-
+    startH = getPanelHeight();
     sidebar.style.transition = "none";
-    sheetHandle.style.cursor = "grabbing";
-
-    // capture pointer
     sheetHandle.setPointerCapture(e.pointerId);
   }
 
   function onMove(e) {
     if (!dragging) return;
-    const dy = startY - e.clientY; // up = positive
-    let newH = startHeight + dy;
+    const dy = startY - e.clientY; // upward drag -> positive
+    let newH = startH + dy;
+    newH = Math.max(HANDLE_H, Math.min(maxPanelH(), newH));
 
-    // clamp
-    const minH = 0;
-    const maxH = expH();
-    newH = Math.max(minH, Math.min(maxH, newH));
-
-    // when very low, visually keep it almost gone
-    if (newH < 10) newH = 0;
-
-    // apply live height
-    sidebar.style.height = `${newH}px`;
-    sidebar.style.transform = "translateY(0)";
-
-    // show fab only if fully down
-    if (newH === 0) {
-      openPanelFab.classList.remove("hidden");
+    // dynamic modes while dragging
+    if (newH <= HANDLE_H + 3) {
+      setPanelCollapsed(true);
     } else {
-      openPanelFab.classList.add("hidden");
+      setPanelCollapsed(false);
     }
+
+    // If user drags higher than search height, show full panel (and intro if not dismissed)
+    if (newH <= SEARCH_H + 20) {
+      setPanelMode("searchOnly");
+    } else {
+      const introDismissed = localStorage.getItem("nil_intro_dismissed") === "1";
+      setPanelMode(introDismissed ? "" : ""); // full mode = no special class
+    }
+
+    sidebar.style.setProperty("--sheet-h", `${Math.round(newH)}px`);
+    syncChevronForHeight(newH);
+    if (map) map.invalidateSize();
   }
 
   function onUp(e) {
     if (!dragging) return;
     dragging = false;
-
     sheetHandle.releasePointerCapture(e.pointerId);
-
-    // restore transitions
-    sidebar.style.transition = "";
-    sheetHandle.style.cursor = "";
-
-    const h = parseFloat(sidebar.style.height || `${currentHeight()}`);
-    sidebar.style.height = ""; // reset inline height so CSS states work
-
-    // snap based on drag result
-    if (h <= 0) {
-      setSheetState("hidden");
-      setTimeout(() => map.invalidateSize(), 80);
-      return;
-    }
-
-    snapToHeight(h);
-    setTimeout(() => map.invalidateSize(), 120);
+    sidebar.style.transition = ""; // restore
+    setTimeout(() => map && map.invalidateSize(), 120);
   }
 
   sheetHandle.addEventListener("pointerdown", onDown);
   sheetHandle.addEventListener("pointermove", onMove);
   sheetHandle.addEventListener("pointerup", onUp);
   sheetHandle.addEventListener("pointercancel", onUp);
-
-  // keep snap heights consistent on resize/orientation
-  window.addEventListener("resize", () => {
-    if (!isMobile()) return;
-    const st = getSheetState();
-    // re-apply state to get correct vh-based height
-    setSheetState(st);
-  });
 }
 
 // ===== Autocomplete helpers =====
@@ -280,10 +253,7 @@ function renderSuggestions() {
   if (!searchSuggest) return;
 
   const q = (searchTerm || "").trim();
-  if (!q) {
-    hideSuggestions();
-    return;
-  }
+  if (!q) { hideSuggestions(); return; }
 
   const qLower = q.toLowerCase();
 
@@ -308,10 +278,7 @@ function renderSuggestions() {
 
   candidates = candidates.slice(0, 10);
 
-  if (!candidates.length) {
-    hideSuggestions();
-    return;
-  }
+  if (!candidates.length) { hideSuggestions(); return; }
 
   searchSuggest.innerHTML = "";
   searchSuggest.classList.remove("hidden");
@@ -340,10 +307,9 @@ function renderSuggestions() {
 
       onSelectNil(item.f, { zoom: true });
 
-      // Clear search after selection (better UX)
+      // Clear search after selection
       searchInput.value = "";
       searchTerm = "";
-
       hideSuggestions();
 
       geoLayer.setStyle(featureStyle);
@@ -411,14 +377,30 @@ async function init() {
   updateZoomButtonState();
   updateInterpretationBox();
 
-  // sheet initial state
-  if (isMobile()) setSheetState("peek");
-  else sidebar.classList.remove("sheet--hidden", "sheet--peek", "sheet--expanded");
-  syncFab();
-  syncSheetChevron();
+  // PANEL initial state (mobile UX)
+  if (isMobile()) {
+    // show just enough for intro (if present), otherwise search-only
+    if (!introDismissed) {
+      setPanelCollapsed(false);
+      setPanelMode("compact");
+      setPanelHeight(COMPACT_H, { animate: true });
+    } else {
+      setPanelCollapsed(false);
+      setPanelMode("searchOnly");
+      setPanelHeight(SEARCH_H, { animate: true });
+    }
+  } else {
+    // desktop: normal sidebar
+    sidebar.classList.remove("isCollapsed", "modeSearchOnly", "modeCompact");
+  }
 
-  // enable drag on handle
+  // drag enabled
   enableSheetDrag();
+
+  // Handle tap: show ONLY search card or collapse to handle-only
+  sheetHandle.addEventListener("click", () => {
+    if (isMobile()) togglePanelTap();
+  });
 
   // events
   colorSelect.addEventListener("change", () => {
@@ -429,14 +411,17 @@ async function init() {
 
   // SEARCH
   searchInput.addEventListener("focus", () => {
-    if (isMobile()) setSheetState("expanded");
+    if (isMobile()) {
+      setPanelCollapsed(false);
+      setPanelMode("searchOnly");
+      setPanelHeight(SEARCH_H, { animate: true });
+    }
     renderSuggestions();
   });
 
   searchInput.addEventListener("blur", () => {
     setTimeout(() => hideSuggestions(), 120);
     setTimeout(() => map.invalidateSize(), 80);
-    if (isMobile() && !selectedNilId) setSheetState("peek");
   });
 
   searchInput.addEventListener("input", () => {
@@ -451,22 +436,47 @@ async function init() {
     renderSuggestions();
   });
 
-  zoomFilteredBtn.addEventListener("click", () => zoomToFiltered());
+  zoomFilteredBtn.addEventListener("click", () => {
+    zoomToFiltered();
+
+    // requirement: do NOT hide the panel; reduce to search-only
+    if (isMobile()) {
+      setPanelCollapsed(false);
+      setPanelMode("searchOnly");
+      setPanelHeight(SEARCH_H, { animate: true });
+    }
+  });
+
   resetBtn.addEventListener("click", () => resetAll());
 
   dismissIntroBtn.addEventListener("click", () => {
     localStorage.setItem("nil_intro_dismissed", "1");
     introCard.classList.add("hidden");
+
+    // After dismiss, keep a compact UX: search-only
+    if (isMobile()) {
+      setPanelCollapsed(false);
+      setPanelMode("searchOnly");
+      setPanelHeight(SEARCH_H, { animate: true });
+    }
   });
 
   step1Btn.addEventListener("click", () => focusPulse(colorSelect));
   step2Btn.addEventListener("click", () => {
     focusPulse(matrixCard);
     matrixCard.scrollIntoView({ behavior: "smooth", block: "start" });
-    if (isMobile()) setSheetState("expanded");
+    if (isMobile()) {
+      setPanelCollapsed(false);
+      setPanelMode(""); // full
+      setPanelHeight(Math.min(maxPanelH(), 720), { animate: true });
+    }
   });
   step3Btn.addEventListener("click", () => {
-    if (isMobile()) setSheetState("expanded");
+    if (isMobile()) {
+      setPanelCollapsed(false);
+      setPanelMode("searchOnly");
+      setPanelHeight(SEARCH_H, { animate: true });
+    }
     focusPulse(searchInput);
     searchInput.focus();
   });
@@ -483,16 +493,8 @@ async function init() {
     toggleListBtn.textContent = listCollapsed ? "Expand" : "Collapse";
   });
 
-  clearSelectionBtn.addEventListener("click", () => clearSelection({ restoreMap: true, hideSheet: true }));
-
-  // tap still toggles (keep it)
-  sheetHandle.addEventListener("click", () => {
-    if (isMobile()) toggleSheet();
-  });
-
-  openPanelFab.addEventListener("click", () => {
-    if (isMobile()) setSheetState("peek");
-  });
+  // Clear selection: do NOT hide panel; reduce to search-only and reveal page top
+  clearSelectionBtn.addEventListener("click", () => clearSelection({ restoreMap: true }));
 
   writeUrlState();
 }
@@ -542,7 +544,7 @@ function renderMatrix() {
   const grandTotal = allFeatures.length;
 
   let html = `<table class="matrix"><thead><tr><th>LISA \\ HMM</th>`;
-  for (const h of HMM_STATES) html += `<th>${h}</th>`;
+  for (const h of HMM_STATES) html += `<th>${shortHmmForMatrix(h)}</th>`;
   html += `</tr></thead><tbody>`;
 
   for (const l of LISA_LEVELS) {
@@ -576,7 +578,7 @@ function renderMatrix() {
 
       if (selectedNilId) {
         const selectedFeat = allFeatures.find(f => String(f.properties?.nil_id ?? "") === String(selectedNilId));
-        if (selectedFeat && !matchesFilters(selectedFeat)) clearSelection({ restoreMap: false, hideSheet: false });
+        if (selectedFeat && !matchesFilters(selectedFeat)) clearSelection({ restoreMap: false });
       }
 
       geoLayer.setStyle(featureStyle);
@@ -587,7 +589,11 @@ function renderMatrix() {
       updateInterpretationBox();
       writeUrlState();
 
-      if (isMobile()) setSheetState("expanded");
+      if (isMobile()) {
+        setPanelCollapsed(false);
+        setPanelMode(""); // full (filters feel "advanced")
+        setPanelHeight(Math.min(maxPanelH(), 720), { animate: true });
+      }
     });
   });
 }
@@ -671,8 +677,11 @@ function onSelectNil(feature, opts = { zoom: true }) {
   updateZoomButtonState();
   writeUrlState();
 
+  // open panel in a way that prioritizes the NIL interpretation (full mode)
   if (isMobile()) {
-    setSheetState("expanded");
+    setPanelCollapsed(false);
+    setPanelMode(""); // full
+    setPanelHeight(Math.min(maxPanelH(), 720), { animate: true });
     setTimeout(() => {
       nilDetailsCard.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 80);
@@ -694,7 +703,7 @@ function renderSelectedNilById(id) {
   else renderSelectedNil(null);
 }
 
-function clearSelection({ restoreMap, hideSheet }) {
+function clearSelection({ restoreMap }) {
   selectedNilId = null;
   renderSelectedNil(null);
   geoLayer.setStyle(featureStyle);
@@ -709,12 +718,14 @@ function clearSelection({ restoreMap, hideSheet }) {
     mapViewBeforeSelect = null;
   }
 
+  // Key UX: keep panel visible but reduced to search-only
   if (isMobile()) {
-    if (hideSheet) setSheetState("hidden");
-    else setSheetState("peek");
-    setTimeout(() => map.invalidateSize(), 80);
+    setPanelCollapsed(false);
+    setPanelMode("searchOnly");
+    setPanelHeight(SEARCH_H, { animate: true });
   }
 
+  // Reveal full page UI: title, filters, legends
   window.scrollTo({ top: 0, behavior: "smooth" });
   const mapCol = document.querySelector(".mapCol");
   if (mapCol) mapCol.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -796,18 +807,14 @@ function zoomToFiltered() {
   }
 
   if (bounds) map.fitBounds(bounds, { padding: [20, 20] });
-
-  if (isMobile()) {
-    setSheetState("hidden");
-    setTimeout(() => map.invalidateSize(), 80);
-  }
+  setTimeout(() => map.invalidateSize(), 80);
 }
 
 // ===== Active state line =====
 function updateActiveStateLine() {
   const parts = [];
   if (activeLisa) parts.push(`LISA=${lisaShort(activeLisa)}`);
-  if (activeHmm) parts.push(`HMM=${activeHmm}`);
+  if (activeHmm) parts.push(`HMM=${shortHmmForMatrix(activeHmm)}`);
   if (searchTerm) parts.push(`search="${searchTerm}"`);
   activeStateLine.textContent = parts.length ? `Active filters: ${parts.join(" · ")}` : "";
 }
@@ -821,7 +828,7 @@ function resetAll() {
 
   hideSuggestions();
 
-  clearSelection({ restoreMap: false, hideSheet: false });
+  clearSelection({ restoreMap: false });
 
   geoLayer.setStyle(featureStyle);
   renderMatrix();
@@ -830,7 +837,13 @@ function resetAll() {
   updateZoomButtonState();
   updateInterpretationBox();
 
-  if (isMobile()) setSheetState("peek");
+  // Reset panel to search-only (clean UX)
+  if (isMobile()) {
+    setPanelCollapsed(false);
+    setPanelMode("searchOnly");
+    setPanelHeight(SEARCH_H, { animate: true });
+  }
+
   writeUrlState();
 }
 
@@ -882,15 +895,21 @@ function hmmFullName(h) {
   return String(h);
 }
 
+// requirement 4: matrix header uses Under
+function shortHmmForMatrix(h) {
+  if (h === "Underestimated") return "Under";
+  return h;
+}
+
 /*
   WHERE TO CHANGE MAP COLORS:
   - HMM colors: colorForHMM()
   - LISA colors: colorForLISA()
 */
 function colorForHMM(s) {
-  if (s === "Underestimated") return "#264653";
-  if (s === "Aligned")        return "#2A9D8F";
-  if (s === "Hyped")          return "#F4A261";
+  if (s === "Underestimated") return "#4c78a8";
+  if (s === "Aligned")        return "#72b7b2";
+  if (s === "Hyped")          return "#f58518";
   return "#cccccc";
 }
 function colorForLISA(cls) {
