@@ -1014,15 +1014,15 @@ function hmmFullName(h) {
   - LISA colors: colorForLISA()
 */
 function colorForHMM(s) {
-  if (s === "Underestimated") return "#4c78a8";
-  if (s === "Aligned")        return "#2f6fff";
-  if (s === "Hyped")          return "#0b3c5d";
+  if (s === "Underestimated") return "#14213d";
+  if (s === "Aligned")        return "#2bb0a6";
+  if (s === "Hyped")          return "#6c63ff";
   return "#cccccc";
 }
 function colorForLISA(cls) {
-  if (cls === "HH")             return "#E63946";
-  if (cls === "LL")             return "#1D3557";
-  if (cls === "LH")             return "#A8DADC";
+  if (cls === "HH")             return "#FF0000";
+  if (cls === "LL")             return "#0000f4";
+  if (cls === "LH")             return "#89cfef";
   if (cls === "NotSignificant") return "#c3c3c3";
   return "#d9d9d9";
 }
