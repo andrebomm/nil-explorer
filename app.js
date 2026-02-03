@@ -777,7 +777,7 @@ async function fetchJSON(path) {
   return await res.json();
 }
 function shortLisa(l) { return l === "NotSignificant" ? "NS" : l; }
-function shortHmm(h)  { return h === "Underestimated" ? "Underestimated" : h; }
+function shortHmm(h)  { return h === "Underestimated" ? "Under" : h; }
 
 /*
   WHERE TO CHANGE MAP COLORS:
