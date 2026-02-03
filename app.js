@@ -36,6 +36,7 @@ const zoomFilteredBtn = document.getElementById("zoomFilteredBtn");
 const resetBtn = document.getElementById("resetBtn");
 const searchInput = document.getElementById("searchInput");
 const searchSuggest = document.getElementById("searchSuggest");
+const clearSearchBtn = document.getElementById("clearSearchBtn");
 
 const introCard = document.getElementById("introCard");
 const dismissIntroBtn = document.getElementById("dismissIntroBtn");
@@ -70,7 +71,8 @@ const activeStateLine = document.getElementById("activeStateLine");
 const sidebar = document.getElementById("sidebar");
 const sheetHandle = document.getElementById("sheetHandle");
 const sheetChevron = document.getElementById("sheetChevron");
-const openPanelFab = document.getElementById("openPanelFab");
+const sheetInner = document.querySelector(".sheetInner");
+const searchCard = document.getElementById("searchCard");
 
 // ===== Interpretations =====
 const CELL_INTERP = {
@@ -119,67 +121,108 @@ function writeUrlState() {
   history.replaceState(null, "", `${location.pathname}?${q.toString()}`);
 }
 
-// ===== Mobile sheet (3 states) =====
+// ===== Mobile helpers =====
 function isMobile() {
   return window.matchMedia && window.matchMedia("(max-width: 980px)").matches;
 }
-function getSheetState() {
-  if (sidebar.classList.contains("sheet--hidden")) return "hidden";
-  if (sidebar.classList.contains("sheet--expanded")) return "expanded";
-  return "peek";
-}
-function setSheetState(state) {
-  sidebar.classList.remove("sheet--hidden", "sheet--peek", "sheet--expanded");
-  sidebar.classList.add(`sheet--${state}`);
-  syncSheetChevron();
-  syncFab();
-}
-function syncSheetChevron() {
+
+// ===== Panel mode + height control =====
+function setPanelMode(mode) {
   if (!isMobile()) return;
-  const st = getSheetState();
-  // rotate chevron when expanded (down)
-  sheetChevron.classList.toggle("isDown", st === "expanded");
-}
-function syncFab() {
-  if (!isMobile()) {
-    openPanelFab.classList.add("hidden");
-    return;
-  }
-  const st = getSheetState();
-  openPanelFab.classList.toggle("hidden", st !== "hidden");
-}
-function toggleSheet() {
-  const st = getSheetState();
-  if (st === "hidden") setSheetState("peek");
-  else if (st === "peek") setSheetState("expanded");
-  else setSheetState("peek");
+  sidebar.dataset.mode = mode; // intro | search | full | handle
+  syncChevron();
 }
 
-// ===== DRAG HANDLE (mobile) =====
-function enableSheetDrag() {
+function syncChevron() {
   if (!isMobile()) return;
-  if (!sheetHandle) return;
+  const mode = sidebar.dataset.mode || "full";
+  // down when tall/full, up otherwise
+  sheetChevron.classList.toggle("isDown", mode === "full");
+}
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+function handleHeightPx() {
+  return sheetHandle ? sheetHandle.getBoundingClientRect().height : 38;
+}
+
+function calcSearchHeightPx() {
+  const base = handleHeightPx();
+  if (!searchCard) return base + 180;
+  const rect = searchCard.getBoundingClientRect();
+  // inner padding + some breathing room for suggestions
+  return base + rect.height + 16;
+}
+
+function calcIntroHeightPx() {
+  const base = handleHeightPx();
+  if (!introCard) return base + 220;
+  const rect = introCard.getBoundingClientRect();
+  return base + rect.height + 16;
+}
+
+function maxPanelHeightPx() {
+  return Math.round(window.innerHeight * 0.92);
+}
+
+function minPanelHeightPx() {
+  // handle-only visible: keep exactly the handle area
+  return Math.round(handleHeightPx());
+}
+
+function setPanelHeight(px) {
+  if (!isMobile()) return;
+  const h = clamp(px, minPanelHeightPx(), maxPanelHeightPx());
+  sidebar.style.height = `${h}px`;
+  setTimeout(() => map?.invalidateSize?.(), 60);
+}
+
+function setPanelToSearchOnly() {
+  if (!isMobile()) return;
+  setPanelMode("search");
+  setPanelHeight(calcSearchHeightPx());
+}
+
+function setPanelToIntroOnly() {
+  if (!isMobile()) return;
+  setPanelMode("intro");
+  setPanelHeight(calcIntroHeightPx());
+}
+
+function setPanelToFull() {
+  if (!isMobile()) return;
+  setPanelMode("full");
+  setPanelHeight(maxPanelHeightPx());
+}
+
+function setPanelToHandleOnly() {
+  if (!isMobile()) return;
+  setPanelMode("handle");
+  setPanelHeight(minPanelHeightPx());
+}
+
+// ===== Drag handle (free drag, no forced snap) =====
+function enableSheetDrag() {
+  if (!isMobile() || !sheetHandle) return;
 
   let dragging = false;
   let startY = 0;
   let startHeight = 0;
 
-  const peekH = () => Math.round(window.innerHeight * 0.24);
-  const expH  = () => Math.round(window.innerHeight * 0.92);
-
   function currentHeight() {
-    const rect = sidebar.getBoundingClientRect();
-    return rect.height;
+    const h = parseFloat(getComputedStyle(sidebar).height || "0");
+    return isFinite(h) ? h : 0;
   }
 
-  function snapToHeight(h) {
-    const vh = window.innerHeight;
-    const minHide = Math.round(vh * 0.16);   // below this -> hidden
-    const midPeek = Math.round(vh * 0.55);   // below this -> peek, else expanded
-
-    if (h < minHide) setSheetState("hidden");
-    else if (h < midPeek) setSheetState("peek");
-    else setSheetState("expanded");
+  function decideModeFromHeight(h) {
+    const minH = minPanelHeightPx();
+    const searchH = calcSearchHeightPx();
+    // small deadzone so it doesn't flicker
+    if (h <= minH + 6) return "handle";
+    if (h <= searchH + 10) return "search";
+    return "full";
   }
 
   function onDown(e) {
@@ -187,61 +230,36 @@ function enableSheetDrag() {
     dragging = true;
     startY = e.clientY;
     startHeight = currentHeight();
-
-    sidebar.style.transition = "none";
     sheetHandle.style.cursor = "grabbing";
-
-    // capture pointer
     sheetHandle.setPointerCapture(e.pointerId);
   }
 
   function onMove(e) {
     if (!dragging) return;
     const dy = startY - e.clientY; // up = positive
-    let newH = startHeight + dy;
+    const rawH = startHeight + dy;
+    const h = clamp(rawH, minPanelHeightPx(), maxPanelHeightPx());
 
-    // clamp
-    const minH = 0;
-    const maxH = expH();
-    newH = Math.max(minH, Math.min(maxH, newH));
+    sidebar.style.transition = "none";
+    sidebar.style.height = `${h}px`;
 
-    // when very low, visually keep it almost gone
-    if (newH < 10) newH = 0;
-
-    // apply live height
-    sidebar.style.height = `${newH}px`;
-    sidebar.style.transform = "translateY(0)";
-
-    // show fab only if fully down
-    if (newH === 0) {
-      openPanelFab.classList.remove("hidden");
-    } else {
-      openPanelFab.classList.add("hidden");
-    }
+    const mode = decideModeFromHeight(h);
+    setPanelMode(mode);
   }
 
   function onUp(e) {
     if (!dragging) return;
     dragging = false;
-
     sheetHandle.releasePointerCapture(e.pointerId);
-
-    // restore transitions
-    sidebar.style.transition = "";
     sheetHandle.style.cursor = "";
+    sidebar.style.transition = "";
 
-    const h = parseFloat(sidebar.style.height || `${currentHeight()}`);
-    sidebar.style.height = ""; // reset inline height so CSS states work
+    // keep the chosen height as-is (free drag),
+    // but ensure mode is consistent with final height
+    const h = currentHeight();
+    setPanelMode(decideModeFromHeight(h));
 
-    // snap based on drag result
-    if (h <= 0) {
-      setSheetState("hidden");
-      setTimeout(() => map.invalidateSize(), 80);
-      return;
-    }
-
-    snapToHeight(h);
-    setTimeout(() => map.invalidateSize(), 120);
+    setTimeout(() => map.invalidateSize(), 80);
   }
 
   sheetHandle.addEventListener("pointerdown", onDown);
@@ -249,12 +267,34 @@ function enableSheetDrag() {
   sheetHandle.addEventListener("pointerup", onUp);
   sheetHandle.addEventListener("pointercancel", onUp);
 
-  // keep snap heights consistent on resize/orientation
   window.addEventListener("resize", () => {
     if (!isMobile()) return;
-    const st = getSheetState();
-    // re-apply state to get correct vh-based height
-    setSheetState(st);
+    // keep current mode but clamp height
+    const h = currentHeight();
+    setPanelHeight(h);
+    syncChevron();
+  });
+}
+
+// ===== Tap behavior (handle tap toggles search/full/handle in a UX-friendly loop) =====
+function enableHandleTapToggle() {
+  if (!isMobile() || !sheetHandle) return;
+
+  sheetHandle.addEventListener("click", () => {
+    const mode = sidebar.dataset.mode || "full";
+    if (mode === "full") {
+      // tap -> focus mode: only search
+      setPanelToSearchOnly();
+    } else if (mode === "search") {
+      // tap -> expand
+      setPanelToFull();
+    } else if (mode === "intro") {
+      // tap while intro visible -> keep intro (don't expand to full)
+      setPanelToIntroOnly();
+    } else {
+      // handle-only -> bring back search
+      setPanelToSearchOnly();
+    }
   });
 }
 
@@ -265,14 +305,32 @@ function hideSuggestions() {
   searchSuggest.innerHTML = "";
 }
 
+function syncClearSearchBtn() {
+  if (!clearSearchBtn) return;
+  const hasText = (searchInput.value || "").trim().length > 0;
+  clearSearchBtn.classList.toggle("hidden", !hasText);
+}
+
+function clearSearch() {
+  searchInput.value = "";
+  searchTerm = "";
+
+  hideSuggestions();
+  syncClearSearchBtn();
+
+  // update filtering + UI
+  geoLayer.setStyle(featureStyle);
+  renderList();
+  updateActiveStateLine();
+  updateZoomButtonState();
+  writeUrlState();
+}
+
 // filters ONLY by active LISA/HMM (not by searchTerm)
 function matchesNonSearchFilters(feature) {
   const p = feature.properties || {};
-  const lisa = p.lisa_class;
-  const hmm  = p.hmm_state;
-
-  if (activeLisa && lisa !== activeLisa) return false;
-  if (activeHmm  && hmm !== activeHmm) return false;
+  if (activeLisa && p.lisa_class !== activeLisa) return false;
+  if (activeHmm  && p.hmm_state !== activeHmm) return false;
   return true;
 }
 
@@ -280,10 +338,7 @@ function renderSuggestions() {
   if (!searchSuggest) return;
 
   const q = (searchTerm || "").trim();
-  if (!q) {
-    hideSuggestions();
-    return;
-  }
+  if (!q) { hideSuggestions(); return; }
 
   const qLower = q.toLowerCase();
 
@@ -308,10 +363,7 @@ function renderSuggestions() {
 
   candidates = candidates.slice(0, 10);
 
-  if (!candidates.length) {
-    hideSuggestions();
-    return;
-  }
+  if (!candidates.length) { hideSuggestions(); return; }
 
   searchSuggest.innerHTML = "";
   searchSuggest.classList.remove("hidden");
@@ -340,10 +392,9 @@ function renderSuggestions() {
 
       onSelectNil(item.f, { zoom: true });
 
-      // Clear search after selection (better UX)
+      // Clear search after selection
       searchInput.value = "";
       searchTerm = "";
-
       hideSuggestions();
 
       geoLayer.setStyle(featureStyle);
@@ -365,8 +416,8 @@ window.addEventListener("DOMContentLoaded", init);
 async function init() {
   readUrlState();
 
+  // intro persistence
   const introDismissed = localStorage.getItem("nil_intro_dismissed") === "1";
-  if (introDismissed) introCard.classList.add("hidden");
 
   // load data
   geojson = await fetchJSON("data/nil.geojson");
@@ -388,14 +439,6 @@ async function init() {
   map.fitBounds(geoLayer.getBounds(), { padding: [10, 10] });
   setTimeout(() => map.invalidateSize(), 150);
 
-  // keyboard/viewport resize fix
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", () => {
-      setTimeout(() => map.invalidateSize(), 50);
-    });
-  }
-  window.addEventListener("orientationchange", () => setTimeout(() => map.invalidateSize(), 200));
-
   // legends
   renderLegends();
 
@@ -411,14 +454,27 @@ async function init() {
   updateZoomButtonState();
   updateInterpretationBox();
 
-  // sheet initial state
-  if (isMobile()) setSheetState("peek");
-  else sidebar.classList.remove("sheet--hidden", "sheet--peek", "sheet--expanded");
-  syncFab();
-  syncSheetChevron();
+  // mobile initial panel behavior:
+  // show ONLY the intro (not full panel)
+  if (isMobile()) {
+    if (introDismissed) {
+      // show search-only by default
+      setPanelToSearchOnly();
+      setPanelMode("search");
+    } else {
+      setPanelToIntroOnly();
+      setPanelMode("intro");
+    }
+  } else {
+    // desktop sidebar always full
+    sidebar.dataset.mode = "full";
+    sidebar.style.height = "";
+  }
+  syncChevron();
 
-  // enable drag on handle
+  // enable drag & tap
   enableSheetDrag();
+  enableHandleTapToggle();
 
   // events
   colorSelect.addEventListener("change", () => {
@@ -429,44 +485,59 @@ async function init() {
 
   // SEARCH
   searchInput.addEventListener("focus", () => {
-    if (isMobile()) setSheetState("expanded");
+    if (isMobile()) {
+      // keep it compact: search-only (good for keyboard)
+      setPanelToSearchOnly();
+    }
     renderSuggestions();
   });
 
   searchInput.addEventListener("blur", () => {
     setTimeout(() => hideSuggestions(), 120);
     setTimeout(() => map.invalidateSize(), 80);
-    if (isMobile() && !selectedNilId) setSheetState("peek");
   });
 
   searchInput.addEventListener("input", () => {
     searchTerm = (searchInput.value || "").trim().toLowerCase();
-
     geoLayer.setStyle(featureStyle);
     renderList();
     updateActiveStateLine();
     updateZoomButtonState();
     writeUrlState();
-
     renderSuggestions();
+  });
+  
+  // --- Clear (X) button: show/hide + action ---
+  syncClearSearchBtn(); // initial
+
+  searchInput.addEventListener("input", () => {
+    syncClearSearchBtn();
+  });
+
+  clearSearchBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    clearSearch();
+    searchInput.focus(); // keeps keyboard open on mobile
   });
 
   zoomFilteredBtn.addEventListener("click", () => zoomToFiltered());
+
   resetBtn.addEventListener("click", () => resetAll());
 
   dismissIntroBtn.addEventListener("click", () => {
     localStorage.setItem("nil_intro_dismissed", "1");
     introCard.classList.add("hidden");
+    if (isMobile()) setPanelToSearchOnly();
   });
 
   step1Btn.addEventListener("click", () => focusPulse(colorSelect));
   step2Btn.addEventListener("click", () => {
     focusPulse(matrixCard);
     matrixCard.scrollIntoView({ behavior: "smooth", block: "start" });
-    if (isMobile()) setSheetState("expanded");
+    if (isMobile()) setPanelToFull();
   });
   step3Btn.addEventListener("click", () => {
-    if (isMobile()) setSheetState("expanded");
+    if (isMobile()) setPanelToSearchOnly();
     focusPulse(searchInput);
     searchInput.focus();
   });
@@ -483,16 +554,19 @@ async function init() {
     toggleListBtn.textContent = listCollapsed ? "Expand" : "Collapse";
   });
 
-  clearSelectionBtn.addEventListener("click", () => clearSelection({ restoreMap: true, hideSheet: true }));
-
-  // tap still toggles (keep it)
-  sheetHandle.addEventListener("click", () => {
-    if (isMobile()) toggleSheet();
+  clearSelectionBtn.addEventListener("click", () => {
+    // Do NOT hide panel. Return to search-only and restore full page context.
+    clearSelection({ restoreMap: true });
+    if (isMobile()) setPanelToSearchOnly();
   });
 
-  openPanelFab.addEventListener("click", () => {
-    if (isMobile()) setSheetState("peek");
-  });
+  // viewport resize fix for keyboard
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", () => {
+      setTimeout(() => map.invalidateSize(), 50);
+    });
+  }
+  window.addEventListener("orientationchange", () => setTimeout(() => map.invalidateSize(), 200));
 
   writeUrlState();
 }
@@ -537,12 +611,17 @@ function featureStyle(feature) {
 }
 
 // ===== Matrix =====
+function hmmMatrixLabel(h) {
+  return (h === "Underestimated") ? "Under" : h;
+}
+function lisaShort(l) { return l === "NotSignificant" ? "NS" : l; }
+
 function renderMatrix() {
   const counts = makeContingency(allFeatures);
   const grandTotal = allFeatures.length;
 
   let html = `<table class="matrix"><thead><tr><th>LISA \\ HMM</th>`;
-  for (const h of HMM_STATES) html += `<th>${h}</th>`;
+  for (const h of HMM_STATES) html += `<th>${hmmMatrixLabel(h)}</th>`;
   html += `</tr></thead><tbody>`;
 
   for (const l of LISA_LEVELS) {
@@ -574,9 +653,13 @@ function renderMatrix() {
         activeLisa = l; activeHmm = h;
       }
 
+      // if current NIL is filtered out, clear selection (but keep panel search-only)
       if (selectedNilId) {
         const selectedFeat = allFeatures.find(f => String(f.properties?.nil_id ?? "") === String(selectedNilId));
-        if (selectedFeat && !matchesFilters(selectedFeat)) clearSelection({ restoreMap: false, hideSheet: false });
+        if (selectedFeat && !matchesFilters(selectedFeat)) {
+          clearSelection({ restoreMap: false });
+          if (isMobile()) setPanelToSearchOnly();
+        }
       }
 
       geoLayer.setStyle(featureStyle);
@@ -587,7 +670,8 @@ function renderMatrix() {
       updateInterpretationBox();
       writeUrlState();
 
-      if (isMobile()) setSheetState("expanded");
+      // UX: matrix interaction should not fully cover the map
+      if (isMobile()) setPanelToSearchOnly();
     });
   });
 }
@@ -598,7 +682,6 @@ function makeContingency(features) {
     counts[l] = {};
     for (const h of HMM_STATES) counts[l][h] = 0;
   }
-
   for (const f of features) {
     const p = f.properties || {};
     const l = p.lisa_class;
@@ -671,11 +754,10 @@ function onSelectNil(feature, opts = { zoom: true }) {
   updateZoomButtonState();
   writeUrlState();
 
+  // For selection we do want full info, but still allow user to drag down.
   if (isMobile()) {
-    setSheetState("expanded");
-    setTimeout(() => {
-      nilDetailsCard.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 80);
+    setPanelToFull();
+    setTimeout(() => nilDetailsCard.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
   }
 
   if (opts.zoom) {
@@ -685,16 +767,13 @@ function onSelectNil(feature, opts = { zoom: true }) {
 }
 
 function renderSelectedNilById(id) {
-  if (!id) {
-    renderSelectedNil(null);
-    return;
-  }
+  if (!id) { renderSelectedNil(null); return; }
   const feat = allFeatures.find(f => String(f.properties?.nil_id ?? "") === String(id));
   if (feat) renderSelectedNil(feat);
   else renderSelectedNil(null);
 }
 
-function clearSelection({ restoreMap, hideSheet }) {
+function clearSelection({ restoreMap }) {
   selectedNilId = null;
   renderSelectedNil(null);
   geoLayer.setStyle(featureStyle);
@@ -709,16 +788,11 @@ function clearSelection({ restoreMap, hideSheet }) {
     mapViewBeforeSelect = null;
   }
 
-  if (isMobile()) {
-    if (hideSheet) setSheetState("hidden");
-    else setSheetState("peek");
-    setTimeout(() => map.invalidateSize(), 80);
-  }
-
+  // Return to full page context (header/legends)
   window.scrollTo({ top: 0, behavior: "smooth" });
   const mapCol = document.querySelector(".mapCol");
   if (mapCol) mapCol.scrollIntoView({ behavior: "smooth", block: "start" });
-  setTimeout(() => map.invalidateSize(), 180);
+  setTimeout(() => map.invalidateSize(), 160);
 }
 
 function renderSelectedNil(feature) {
@@ -794,20 +868,17 @@ function zoomToFiltered() {
     const b = layer.getBounds();
     bounds = bounds ? bounds.extend(b) : b;
   }
-
   if (bounds) map.fitBounds(bounds, { padding: [20, 20] });
 
-  if (isMobile()) {
-    setSheetState("hidden");
-    setTimeout(() => map.invalidateSize(), 80);
-  }
+  // UX: do NOT hide the panel; just reduce to search-only
+  if (isMobile()) setPanelToSearchOnly();
 }
 
 // ===== Active state line =====
 function updateActiveStateLine() {
   const parts = [];
   if (activeLisa) parts.push(`LISA=${lisaShort(activeLisa)}`);
-  if (activeHmm) parts.push(`HMM=${activeHmm}`);
+  if (activeHmm) parts.push(`HMM=${hmmMatrixLabel(activeHmm)}`);
   if (searchTerm) parts.push(`search="${searchTerm}"`);
   activeStateLine.textContent = parts.length ? `Active filters: ${parts.join(" · ")}` : "";
 }
@@ -818,10 +889,11 @@ function resetAll() {
   activeHmm = null;
   searchTerm = "";
   searchInput.value = "";
+  syncClearSearchBtn();
 
   hideSuggestions();
 
-  clearSelection({ restoreMap: false, hideSheet: false });
+  clearSelection({ restoreMap: false });
 
   geoLayer.setStyle(featureStyle);
   renderMatrix();
@@ -830,7 +902,7 @@ function resetAll() {
   updateZoomButtonState();
   updateInterpretationBox();
 
-  if (isMobile()) setSheetState("peek");
+  if (isMobile()) setPanelToSearchOnly();
   writeUrlState();
 }
 
@@ -867,8 +939,6 @@ async function fetchJSON(path) {
   return await res.json();
 }
 
-function lisaShort(l) { return l === "NotSignificant" ? "NS" : l; }
-
 function lisaFullName(l) {
   if (l === "HH") return "High-High";
   if (l === "LL") return "Low-Low";
@@ -876,7 +946,6 @@ function lisaFullName(l) {
   if (l === "NotSignificant") return "Not significant";
   return String(l);
 }
-
 function hmmFullName(h) {
   if (HMM_STATES.includes(h)) return h;
   return String(h);

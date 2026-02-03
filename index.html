@@ -6,7 +6,7 @@
   <title>Neighbor Identity Label Explorer — LISA × HMM</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="style.css?v=12" />
+  <link rel="stylesheet" href="style.css?v=13" />
 </head>
 
 <body>
@@ -40,13 +40,10 @@
       </div>
 
       <div id="map" aria-label="NIL map"></div>
-
-      <!-- Mobile-only floating button to reopen the panel when hidden -->
-      <button id="openPanelFab" class="fab hidden" type="button">Open panel</button>
     </section>
 
     <!-- Sidebar / bottom sheet -->
-    <aside id="sidebar" class="sheet sheet--peek" aria-label="Controls">
+    <aside id="sidebar" class="sheet" aria-label="Controls" data-mode="full">
       <div id="sheetHandle" class="sheetHandle" aria-label="Toggle panel">
         <div class="grab"></div>
 
@@ -80,7 +77,7 @@
         </section>
 
         <!-- Search -->
-        <section class="card">
+        <section id="searchCard" class="card">
           <h2 class="cardTitle">Search for a NIL</h2>
 
           <div class="searchWrap">
@@ -89,6 +86,10 @@
                    type="search"
                    placeholder="Type a NIL name or id..."
                    autocomplete="off" />
+	    <button id="clearSearchBtn"
+          	   class="clearSearchBtn hidden"
+          	   type="button"
+          	   aria-label="Clear search">×</button>
             <div id="searchSuggest" class="suggest hidden" aria-label="Search suggestions"></div>
           </div>
 
@@ -155,6 +156,6 @@
   </main>
 
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script defer src="app.js?v=12"></script>
+  <script defer src="app.js?v=13"></script>
 </body>
 </html>
