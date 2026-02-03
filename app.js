@@ -747,16 +747,16 @@ function resetAll() {
 // ===== Legends =====
 function renderLegends() {
   legendHMM.innerHTML = [
-    ["Underestimated", colorForHMM("Underestimated"), "Under"],
+    ["Underestimated", colorForHMM("Underestimated"), "Underestimated"],
     ["Aligned",        colorForHMM("Aligned"),        "Aligned"],
     ["Hyped",          colorForHMM("Hyped"),          "Hyped"]
   ].map(([_, color, label]) => legendItem(label, color)).join("");
 
   legendLISA.innerHTML = [
-    ["HH",             colorForLISA("HH"),             "HH"],
-    ["LL",             colorForLISA("LL"),             "LL"],
-    ["LH",             colorForLISA("LH"),             "LH"],
-    ["NotSignificant", colorForLISA("NotSignificant"), "NS"]
+    ["HH",             colorForLISA("HH"),             "High-High"],
+    ["LL",             colorForLISA("LL"),             "Low-Low"],
+    ["LH",             colorForLISA("LH"),             "Low-High"],
+    ["NotSignificant", colorForLISA("NotSignificant"), "Not Significant"]
   ].map(([_, color, label]) => legendItem(label, color)).join("");
 }
 function legendItem(label, color) {
@@ -777,7 +777,7 @@ async function fetchJSON(path) {
   return await res.json();
 }
 function shortLisa(l) { return l === "NotSignificant" ? "NS" : l; }
-function shortHmm(h)  { return h === "Underestimated" ? "Under" : h; }
+function shortHmm(h)  { return h === "Underestimated" ? "Underestimated" : h; }
 
 /*
   WHERE TO CHANGE MAP COLORS:
