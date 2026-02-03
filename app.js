@@ -1015,8 +1015,8 @@ function hmmFullName(h) {
 */
 function colorForHMM(s) {
   if (s === "Underestimated") return "#4c78a8";
-  if (s === "Aligned")        return "#72b7b2";
-  if (s === "Hyped")          return "#f58518";
+  if (s === "Aligned")        return "#2f6fff";
+  if (s === "Hyped")          return "#0b3c5d";
   return "#cccccc";
 }
 function colorForLISA(cls) {
